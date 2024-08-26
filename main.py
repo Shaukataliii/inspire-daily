@@ -1,5 +1,5 @@
 from plyer import notification
-import time, random, os
+import time, random, os, yaml, subprocess, zipfile
 import pandas as pd
 from datetime import datetime
 
@@ -13,7 +13,7 @@ class NotificationHandler:
         while True:
             if TimeChecker.is_time_to_notify():
                 quote = quote_provider.get_quote()
-                NotificationDisplayer.show_quote_notification(quote)
+                NotificationDisplayer.show_notification(quote)
             self.wait_before_recheck()
 
     def wait_before_recheck(self):
@@ -43,13 +43,13 @@ class QuoteProvider:
         self.__update_dataset_size_var()
     
     def __load_df(self):
-        if self.__df_file_exists():
+        if self.df_file_exists():
             self.df = pd.read_csv(self.df_filepath)
             return
         else:
             raise Exception("Provided quotes file doesn't exist.")
 
-    def __df_file_exists(self) -> bool:
+    def df_file_exists(self) -> bool:
         if os.path.exists(self.df_filepath):
             return True
         else:
@@ -80,11 +80,12 @@ class QuoteFormatter:
 
     
 class NotificationDisplayer:
-    def show_quote_notification(quote: str):
-        print("Gonna display notification..")
+    def show_notification(message: str):
         notification.notify(
+            app_name="Inspire Daily",
             title="Daily Quote",
-            message=quote,
+            message=message,
+            ticker="Quote",
             timeout=10  # Notification will stay for 10 seconds
         )
         time.sleep(50)  # Sleep to avoid multiple notifications within the same minute
@@ -119,21 +120,89 @@ class TimeChecker:
             return False
 
 
-def process_initializer(df_filepath, notification_hour, notification_minute, seconds_to_wait_before_recheck):
-    quote_provider = QuoteProvider()
-    time_checker = TimeChecker()
-    notification_handler = NotificationHandler()
+class DatasetPreparer:
+    def __init__(self, kaggle_api_command: str):
+        self.kaggle_api_command = kaggle_api_command
+        self.zip_dataset_name = kaggle_api_command.split('/')[-1] + ".zip"
 
-    quote_provider.setter(df_filepath)
-    time_checker.setter(notification_hour, notification_minute)
-    notification_handler.setter(seconds_to_wait_before_recheck)
-    notification_handler.display_quote_on_time(quote_provider)
+    def download_and_unzip_dataset(self):
+        """Raises exception if something goes wrong."""
+        self.__download_from_kaggle()
+        self.__unzip_dataset()
+        self.__delete_useless_files()
+
+    def __download_from_kaggle(self):
+        process = subprocess.Popen(f"cmd /c {self.kaggle_api_command}", shell=True)
+        process.communicate()
+        if process.returncode == 0:
+            print("Dataset Downloaded.")
+        else:
+            raise Exception("Failed to download dataset. Consider trying again and make sure internet is connected.")
+
+    def __unzip_dataset(self):
+        self.__validate_dataset_is_zipped()
+
+        try:
+            with zipfile.ZipFile(self.zip_dataset_name) as file:
+                file.extractall(".")
+            print("Dataset Extracted.")
+        except:
+            raise Exception("An error occured while unzipping the dataset!")
+
+    def __validate_dataset_is_zipped(self):
+        if zipfile.is_zipfile(self.zip_dataset_name):
+            return True
+        else:
+            raise Exception("Downloaded dataset is not a zipfile.")
+
+    def __delete_useless_files(self):
+        if os.path.exists(self.zip_dataset_name):
+            os.remove(self.zip_dataset_name)
+        if os.path.exists("test.txt"):
+            os.remove("test.txt")
+        if os.path.exists("train.txt"):
+            os.remove("train.txt")
+        if os.path.exists("valid.txt"):
+            os.remove("valid.txt")
+        NotificationDisplayer.show_notification("All Done.")
+  
+
+class Initializer(QuoteProvider):
+    def load_instance_params(self, params_filepath: str = "params.yaml"):
+        with open(params_filepath, 'r') as file:
+            params = yaml.safe_load(file)
+
+        self.df_filepath = params["df_filepath"]
+        self.notification_hour = params["notification_hour"]
+        self.notification_minute = params["notification_minute"]
+        self.seconds_to_wait_before_recheck = params["seconds_to_wait_before_recheck"]
+        self.kaggle_dataset_api_cmd = params["kaggle_dataset_api_cmd"]
+
+    def process_initializer(self):
+        self.load_instance_params()
+        self.make_sure_dataset_is_ready()
+
+        quote_provider = QuoteProvider()
+        time_checker = TimeChecker()
+        notification_handler = NotificationHandler()
+
+        quote_provider.setter(self.df_filepath)
+        time_checker.setter(self.notification_hour, self.notification_minute)
+        notification_handler.setter(self.seconds_to_wait_before_recheck)
+
+        notification_handler.display_quote_on_time(quote_provider)
+
+    def make_sure_dataset_is_ready(self):
+        if self.df_file_exists():
+            return
+        else:
+            # download and prepare dataset here
+            NotificationDisplayer.show_notification("Downloading dataset")
+            DatasetPreparer(self.kaggle_dataset_api_cmd).download_and_unzip_dataset()
+
+      
+
 
 if __name__ == "__main__":
-    df_filepath = r"D:\Shaukat ali khan\programming\Data Science - Krish Naik\GenAI\langchain\AI-course-RAG\resources\no-code-files\07-quote-dateset.csv"
-    seconds_to_wait_before_recheck = 59
-    
-    notification_hour = int(input("Enter notification hour: "))
-    notification_minute = int(input("Enter notification minute: "))
-
-    process_initializer(df_filepath, notification_hour, notification_minute, seconds_to_wait_before_recheck)
+    initializer = Initializer()
+    initializer.process_initializer()

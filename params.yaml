@@ -1,0 +1,7 @@
+df_filepath: "quotes.csv"
+kaggle_dataset_api_cmd: "kaggle datasets download -d manann/quotes-500k"
+dataset_csv_filename: "quotes.csv"
+    
+notification_hour: 17
+notification_minute: 00
+seconds_to_wait_before_recheck: 59
