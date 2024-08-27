@@ -1,126 +1,56 @@
 from plyer import notification
 import time, random, os, yaml, subprocess, zipfile
 import pandas as pd
-from datetime import datetime
+from datetime import date 
 
 
-class NotificationHandler:
-    def setter(self, seconds_to_wait_before_recheck_time: int = 30):
-        self.seconds_to_wait_before_recheck_time = seconds_to_wait_before_recheck_time
-    
-    def display_quote_on_time(self, quote_provider):
-        print("Running..")
-        while True:
-            if TimeChecker.is_time_to_notify():
-                quote = quote_provider.get_quote()
-                NotificationDisplayer.show_notification(quote)
-            self.wait_before_recheck()
+class Initializer():
+    """Sets up things. Makes sure dataset is ready and runs the notification handler."""
+    def set_instance_params(self, params):
+        self.df_filepath = params["df_filepath"]
+        self.hours_to_wait_before_recheck = params["hours_to_wait_before_recheck"]
+        self.kaggle_dataset_api_cmd = params["kaggle_dataset_api_cmd"]
 
-    def wait_before_recheck(self):
-        time.sleep(self.seconds_to_wait_before_recheck_time)  # Check every duraction
-        return
+    def process_initializer(self):
+        params = Utilities.load_params()
+        self.set_instance_params(params)
+        self.make_sure_dataset_is_ready()
 
+        notification_handler = NotificationHandler()
+        notification_handler.setter(self.hours_to_wait_before_recheck)
+        quote_provider = QuoteProvider()
+        quote_provider.setter(self.df_filepath)
 
-class QuoteProvider:
-    def setter(self, df_filepath):
-        self.df_filepath = df_filepath
-        self.dataset_size = None
-        self.df = None
+        notification_handler.display_quote_on_time(quote_provider)
 
-    def get_quote(self):
-        print("Getting quote..")
-        quote = self.__get_random_quote()
-        return quote
-
-    def __get_random_quote(self) -> str:
-        self.load_df_update_size_var()
-        index = self.__get_random_index()
-        quote = self.__extract_quote_from_df_at_index(index)
-        return quote
-
-    def load_df_update_size_var(self):
-        self.__load_df()
-        self.__update_dataset_size_var()
-    
-    def __load_df(self):
-        if self.df_file_exists():
-            self.df = pd.read_csv(self.df_filepath)
+    def make_sure_dataset_is_ready(self):
+        if Utilities.df_file_exists():
             return
         else:
-            raise Exception("Provided quotes file doesn't exist.")
+            NotificationDisplayer.show_notification("Downloading dataset")
+            DatasetPreparer(self.kaggle_dataset_api_cmd).download_and_unzip_dataset()
 
-    def df_file_exists(self) -> bool:
-        if os.path.exists(self.df_filepath):
-            return True
-        else:
-            return False
-        
-    def __update_dataset_size_var(self):
-        dataset_size = self.df.shape[0]
-        self.dataset_size = dataset_size - 1
-        print(f"Dataset size is set to: {dataset_size}")
-
-    def __get_random_index(self) -> int:
-        random_index = random.randint(0,self.dataset_size)
-        return random_index
+      
+class Utilities:
+    def load_params(params_filepath: str = "params.yaml"):
+        with open(params_filepath, 'r') as file:
+            params = yaml.safe_load(file)
+        return params
     
-    def __extract_quote_from_df_at_index(self, index) -> pd.Series:
-        quote_details = self.df.iloc[index,:]
-        quote = QuoteFormatter.format_quote(quote_details)
-        return quote
-    
+    def update_params(new_params, params_filepath: str = "params.yaml"):
+        with open(params_filepath, 'w') as file:
+            yaml.dump(new_params, file)
 
-class QuoteFormatter:
-    def format_quote(quote_details: pd.Series) -> str:
-        quote_details = list(quote_details)
-        quote = quote_details[0]
-        author = quote_details[1]
-        quote = f'"{quote}" \n- {author}'
-        return quote
-
-    
-class NotificationDisplayer:
-    def show_notification(message: str):
-        notification.notify(
-            app_name="Inspire Daily",
-            title="Daily Quote",
-            message=message,
-            ticker="Quote",
-            timeout=10  # Notification will stay for 10 seconds
-        )
-        time.sleep(50)  # Sleep to avoid multiple notifications within the same minute
-
-
-class TimeChecker:
-    def setter(self, notification_hour: int = 9, notification_minute: int = 00):
-        TimeChecker.notification_hour = notification_hour
-        TimeChecker.notification_minute = notification_minute
-
-    def is_time_to_notify():
-        print("Checking if it's time to notify..")
-        current_time = TimeChecker._get_current_time()
-        if TimeChecker.__is_notification_hour(current_time.hour) and TimeChecker.__is_notification_minute(current_time.minute):
-            return True
-        else:
-            return False
-        
-    def _get_current_time():
-        return datetime.now().time()
-    
-    def __is_notification_hour(current_hour):
-        if current_hour == TimeChecker.notification_hour:
-            return True
-        else:
-            return False
-
-    def __is_notification_minute(current_minute):
-        if current_minute == TimeChecker.notification_minute:
+    def df_file_exists() -> bool:
+        df_filepath = Utilities.load_params()['dataset_csv_filename']
+        if os.path.exists(df_filepath):
             return True
         else:
             return False
 
 
 class DatasetPreparer:
+    """Downloads the dataset and makes it ready to use."""
     def __init__(self, kaggle_api_command: str):
         self.kaggle_api_command = kaggle_api_command
         self.zip_dataset_name = kaggle_api_command.split('/')[-1] + ".zip"
@@ -129,6 +59,7 @@ class DatasetPreparer:
         """Raises exception if something goes wrong."""
         self.__download_from_kaggle()
         self.__unzip_dataset()
+        self.__remove_quotes_with_len_less_150()
         self.__delete_useless_files()
 
     def __download_from_kaggle(self):
@@ -154,6 +85,12 @@ class DatasetPreparer:
             return True
         else:
             raise Exception("Downloaded dataset is not a zipfile.")
+        
+    def __remove_quotes_with_len_less_150():
+        quote_provider = QuoteProvider()
+        df = quote_provider.__load_df()
+        df = df[df['quote'].str.len() < 150]
+        df.to_csv("quotes.csv", index=False)
 
     def __delete_useless_files(self):
         if os.path.exists(self.zip_dataset_name):
@@ -165,42 +102,130 @@ class DatasetPreparer:
         if os.path.exists("valid.txt"):
             os.remove("valid.txt")
         NotificationDisplayer.show_notification("All Done.")
-  
 
-class Initializer(QuoteProvider):
-    def load_instance_params(self, params_filepath: str = "params.yaml"):
-        with open(params_filepath, 'r') as file:
-            params = yaml.safe_load(file)
 
-        self.df_filepath = params["df_filepath"]
-        self.notification_hour = params["notification_hour"]
-        self.notification_minute = params["notification_minute"]
-        self.seconds_to_wait_before_recheck = params["seconds_to_wait_before_recheck"]
-        self.kaggle_dataset_api_cmd = params["kaggle_dataset_api_cmd"]
+class NotificationHandler:
+    """Handles the displays of quote on time."""
+    def setter(self, hours_to_wait_before_recheck: int = 30):
+        self.hours_to_wait_before_recheck = hours_to_wait_before_recheck
+    
+    def display_quote_on_time(self, quote_provider):
+        print("Running..")
+        while True:
+            if TimeChecker.is_time_to_notify():
+                quote = quote_provider.get_quote()
+                NotificationDisplayer.show_notification(quote)
+            self.wait_before_recheck()
 
-    def process_initializer(self):
-        self.load_instance_params()
-        self.make_sure_dataset_is_ready()
+    def wait_before_recheck(self):
+        seconds_to_wait = self.convert_hours_to_seconds()
+        time.sleep(seconds_to_wait)  # Check every duraction
+        return
+    
+    def convert_hours_to_seconds(self):
+        return self.hours_to_wait_before_recheck * 60 * 60
 
-        quote_provider = QuoteProvider()
-        time_checker = TimeChecker()
-        notification_handler = NotificationHandler()
 
-        quote_provider.setter(self.df_filepath)
-        time_checker.setter(self.notification_hour, self.notification_minute)
-        notification_handler.setter(self.seconds_to_wait_before_recheck)
+class TimeChecker():
+    """Checks if it is the time to show quote notification."""
+    def is_time_to_notify():
+        print("Checking if it's time to notify..")
+        if not TimeChecker.__is_notification_done_today():
+            return True
+        else:
+            return False
+        
+    def __is_notification_done_today():
+        last_notified_date = TimeChecker.__get_last_notified_date_str()
+        date_today = TimeChecker.__get_current_date_str()
 
-        notification_handler.display_quote_on_time(quote_provider)
+        if last_notified_date == date_today:
+            return True
+        else:
+            return False
+        
+    def __get_last_notified_date_str():
+        params = Utilities.load_params()
+        last_notified_date = params['last_notified_date']
+        return last_notified_date
+    
+    def update_last_notified_date_as_today_in_params():
+        params = Utilities.load_params()
+        date_today = TimeChecker.__get_current_date_str()
+        params['last_notified_date'] = date_today
+        Utilities.update_params(params)
 
-    def make_sure_dataset_is_ready(self):
-        if self.df_file_exists():
+    def __get_current_date_str():
+        return str(date.today())
+
+
+class QuoteProvider:
+    """Provides random quote from the quotes dataset."""
+    def setter(self, df_filepath):
+        self.df_filepath = df_filepath
+        self.dataset_size = None
+        self.df = None
+
+    def get_quote(self):
+        print("Getting quote..")
+        quote = self.__get_random_quote()
+        return quote
+
+    def __get_random_quote(self) -> str:
+        self.__load_df_update_size_var()
+        index = self.__get_random_index()
+        quote = self.__extract_quote_from_df_at_index(index)
+        return quote
+
+    def __load_df_update_size_var(self):
+        self.__load_df()
+        self.__update_dataset_size_var()
+    
+    def __load_df(self):
+        if Utilities.df_file_exists():
+            self.df = pd.read_csv(self.df_filepath)
             return
         else:
-            # download and prepare dataset here
-            NotificationDisplayer.show_notification("Downloading dataset")
-            DatasetPreparer(self.kaggle_dataset_api_cmd).download_and_unzip_dataset()
+            raise Exception("Provided quotes file doesn't exist.")
+        
+    def __update_dataset_size_var(self):
+        dataset_size = self.df.shape[0]
+        self.dataset_size = dataset_size - 1
 
-      
+    def __get_random_index(self) -> int:
+        random_index = random.randint(0,self.dataset_size)
+        return random_index
+    
+    def __extract_quote_from_df_at_index(self, index) -> pd.Series:
+        quote_details = self.df.iloc[index,:]
+        quote = QuoteFormatter.format_quote(quote_details)
+        return quote
+    
+
+class QuoteFormatter:
+    """Formats provided quote."""
+    def format_quote(quote_details: pd.Series) -> str:
+        quote_details = list(quote_details)
+        quote = quote_details[0]
+        author = quote_details[1]
+        quote = f'"{quote}" \n- {author}'
+        return quote
+    
+
+class NotificationDisplayer:
+    """Displays notification with provided message."""
+    def show_notification(message: str):
+        notification.notify(
+            app_name="Inspire Daily",
+            title="Daily Quote",
+            message=message,
+            ticker="Quote",
+            timeout=20  # Notification will stay for 20 seconds
+        )
+        TimeChecker.update_last_notified_date_as_today_in_params()
+
+
+
 
 
 if __name__ == "__main__":
