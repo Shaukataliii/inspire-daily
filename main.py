@@ -1,5 +1,6 @@
+from utils import Utilities, DFHandler
 from plyer import notification
-import time, random, os, yaml, subprocess, zipfile
+import time, random, subprocess, zipfile
 import pandas as pd
 from datetime import date 
 
@@ -15,12 +16,7 @@ class Initializer():
         params = Utilities.load_params()
         self.set_instance_params(params)
         self.make_sure_dataset_is_ready()
-
-        notification_handler = NotificationHandler()
-        notification_handler.setter(self.hours_to_wait_before_recheck)
-        quote_provider = QuoteProvider()
-        quote_provider.setter(self.df_filepath)
-
+        notification_handler, quote_provider = self.initialize_classes()
         notification_handler.display_quote_on_time(quote_provider)
 
     def make_sure_dataset_is_ready(self):
@@ -30,23 +26,13 @@ class Initializer():
             NotificationDisplayer.show_notification("Downloading dataset")
             DatasetPreparer(self.kaggle_dataset_api_cmd).download_and_unzip_dataset()
 
-      
-class Utilities:
-    def load_params(params_filepath: str = "params.yaml"):
-        with open(params_filepath, 'r') as file:
-            params = yaml.safe_load(file)
-        return params
-    
-    def update_params(new_params, params_filepath: str = "params.yaml"):
-        with open(params_filepath, 'w') as file:
-            yaml.dump(new_params, file)
-
-    def df_file_exists() -> bool:
-        df_filepath = Utilities.load_params()['dataset_csv_filename']
-        if os.path.exists(df_filepath):
-            return True
-        else:
-            return False
+    def initialize_classes(self):
+        notification_handler = NotificationHandler()
+        notification_handler.setter(self.hours_to_wait_before_recheck)
+        
+        quote_provider = QuoteProvider()
+        quote_provider.setter(self.df_filepath)
+        return (notification_handler, quote_provider)
 
 
 class DatasetPreparer:
@@ -90,7 +76,7 @@ class DatasetPreparer:
         quote_provider = QuoteProvider()
         df = quote_provider.__load_df()
         df = df[df['quote'].str.len() < 150]
-        df.to_csv("quotes.csv", index=False)
+        DFHandler().save_df(df)
 
     def __delete_useless_files(self):
         if os.path.exists(self.zip_dataset_name):
@@ -172,25 +158,14 @@ class QuoteProvider:
         return quote
 
     def __get_random_quote(self) -> str:
-        self.__load_df_update_size_var()
+        self.__load_df_and_set_size()
         index = self.__get_random_index()
         quote = self.__extract_quote_from_df_at_index(index)
         return quote
-
-    def __load_df_update_size_var(self):
-        self.__load_df()
-        self.__update_dataset_size_var()
     
-    def __load_df(self):
-        if Utilities.df_file_exists():
-            self.df = pd.read_csv(self.df_filepath)
-            return
-        else:
-            raise Exception("Provided quotes file doesn't exist.")
-        
-    def __update_dataset_size_var(self):
-        dataset_size = self.df.shape[0]
-        self.dataset_size = dataset_size - 1
+    def __load_df_and_set_size(self):
+        self.df = DFHandler().load_df()
+        self.dataset_size = DFHandler().get_dataset_size(self.df)
 
     def __get_random_index(self) -> int:
         random_index = random.randint(0,self.dataset_size)
@@ -200,7 +175,7 @@ class QuoteProvider:
         quote_details = self.df.iloc[index,:]
         quote = QuoteFormatter.format_quote(quote_details)
         return quote
-    
+
 
 class QuoteFormatter:
     """Formats provided quote."""
@@ -222,6 +197,7 @@ class NotificationDisplayer:
             ticker="Quote",
             timeout=20  # Notification will stay for 20 seconds
         )
+        print("Notification done.")
         TimeChecker.update_last_notified_date_as_today_in_params()
 
 
