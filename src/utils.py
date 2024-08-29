@@ -2,17 +2,17 @@ import os, yaml
 import pandas as pd
 
 class Utilities:
-    def load_params(params_filepath: str = "params.yaml"):
+    def load_params(params_filepath: str = "src/params.yaml"):
         with open(params_filepath, 'r') as file:
             params = yaml.safe_load(file)
         return params
     
-    def update_params(new_params, params_filepath: str = "params.yaml"):
+    def update_params(new_params, params_filepath: str = "src/params.yaml"):
         with open(params_filepath, 'w') as file:
             yaml.dump(new_params, file)
 
     def df_file_exists() -> bool:
-        df_filepath = Utilities.load_params()['dataset_csv_filename']
+        df_filepath = Utilities.load_params()['df_filepath']
         if os.path.exists(df_filepath):
             return True
         else:

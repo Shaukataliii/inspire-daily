@@ -1,6 +1,6 @@
-from utils import Utilities, DFHandler
+from src.utils import Utilities, DFHandler
 from plyer import notification
-import time, random, subprocess, zipfile
+import os, time, random, subprocess, zipfile, shutil
 import pandas as pd
 from datetime import date 
 
@@ -24,7 +24,7 @@ class Initializer():
             return
         else:
             NotificationDisplayer.show_notification("Downloading dataset")
-            DatasetPreparer(self.kaggle_dataset_api_cmd).download_and_unzip_dataset()
+            DatasetPreparer(self.kaggle_dataset_api_cmd, self.df_filepath).download_unzip_clean_move_dataset()
 
     def initialize_classes(self):
         notification_handler = NotificationHandler()
@@ -37,15 +37,18 @@ class Initializer():
 
 class DatasetPreparer:
     """Downloads the dataset and makes it ready to use."""
-    def __init__(self, kaggle_api_command: str):
+    def __init__(self, kaggle_api_command: str, df_filepath: str):
         self.kaggle_api_command = kaggle_api_command
         self.zip_dataset_name = kaggle_api_command.split('/')[-1] + ".zip"
+        self.csv_dataset_name = kaggle_api_command.split('/')[-1] + ".csv"
+        self.df_filepath = df_filepath
 
-    def download_and_unzip_dataset(self):
+    def download_unzip_clean_move_dataset(self):
         """Raises exception if something goes wrong."""
         self.__download_from_kaggle()
         self.__unzip_dataset()
         self.__remove_quotes_with_len_less_150()
+        self.__move_dataset_to_src()
         self.__delete_useless_files()
 
     def __download_from_kaggle(self):
@@ -72,9 +75,15 @@ class DatasetPreparer:
         else:
             raise Exception("Downloaded dataset is not a zipfile.")
         
+    def __move_dataset_to_src(self):
+        try:
+            shutil.move(self.csv_dataset_name, self.df_filepath)
+        except:
+            raise Exception("Dataset moving failed. Try downloading again.")
+
     def __remove_quotes_with_len_less_150():
         quote_provider = QuoteProvider()
-        df = quote_provider.__load_df()
+        df = DFHandler().load_df()
         df = df[df['quote'].str.len() < 150]
         DFHandler().save_df(df)
 
@@ -199,8 +208,6 @@ class NotificationDisplayer:
         )
         print("Notification done.")
         TimeChecker.update_last_notified_date_as_today_in_params()
-
-
 
 
 
