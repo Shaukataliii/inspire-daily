@@ -2,11 +2,6 @@ import os, yaml
 import pandas as pd
 
 class Utilities:
-    def load_params(params_filepath: str = "src/params.yaml"):
-        with open(params_filepath, 'r') as file:
-            params = yaml.safe_load(file)
-        return params
-    
     def update_params(new_params, params_filepath: str = "src/params.yaml"):
         with open(params_filepath, 'w') as file:
             yaml.dump(new_params, file)
@@ -18,6 +13,11 @@ class Utilities:
         else:
             return False
         
+    def load_params(params_filepath: str = "src/params.yaml"):
+        with open(params_filepath, 'r') as file:
+            params = yaml.safe_load(file)
+        return params
+    
 
 class DFHandler:
     def __init__(self):

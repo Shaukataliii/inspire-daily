@@ -5,6 +5,7 @@ import pandas as pd
 from datetime import date 
 
 
+
 class Initializer():
     """Sets up things. Makes sure dataset is ready and runs the notification handler."""
     def set_instance_params(self, params):

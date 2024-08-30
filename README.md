@@ -6,9 +6,7 @@ Now the app will start doing it work.
 - The app will check if the notification is displayed today or not after the setup duration i.e. 4 hours. So if you're on laptop and you don't turn it OFF, you're still at ease. You'll get a notification every day.
 
 ## Features to add
-- Automatically ask permission tos set as start up appliation and do that.
 - Development as a pypi
-- Configuration to automatically required permissions and preferred time for notification.
 
 
 ## Features

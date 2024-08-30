@@ -1,4 +1,4 @@
-from utils import DFHandler
+from src.utils import DFHandler
 import pandas as pd
 
 class QuoteAdder:
