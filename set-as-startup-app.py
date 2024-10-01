@@ -28,6 +28,7 @@ class StartUp:
         path_of_program_batfile_in_startup_dir = self.get_program_batfilepath_in_start_up_dir()
         
         if os.path.exists(path_of_program_batfile_in_startup_dir):
+            print(f"Path: {path_of_program_batfile_in_startup_dir}")
             return True
         else:
             return False

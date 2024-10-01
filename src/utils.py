@@ -7,7 +7,9 @@ class Utilities:
             yaml.dump(new_params, file)
 
     def df_file_exists() -> bool:
-        df_filepath = Utilities.load_params()['df_filepath']
+        """Checks if the quote_df_filepath exists.
+        """
+        df_filepath = Utilities.load_params()['quote_df_filepath']
         if os.path.exists(df_filepath):
             return True
         else:
@@ -18,17 +20,26 @@ class Utilities:
             params = yaml.safe_load(file)
         return params
     
+    def load_pd_dataframe(path: str):
+        """Loads the dataframe if path exists else raise exception."""
+        if os.path.exists(path):
+            return pd.read_csv(path)
+        
+        else:
+            raise Exception(f"Df path doesn't exist. Path: {path}")
+    
 
 class DFHandler:
+    """Handles the saving, loading of quotes dataset."""
     def __init__(self):
-        self.df_filepath = Utilities.load_params()['df_filepath']
+        self.df_filepath = Utilities.load_params()['quote_df_filepath']
 
     def save_df(self, df: pd.DataFrame):
         df.to_csv(self.df_filepath, index=False)
 
     def load_df(self):
         df = self.__load_dataset()
-        return (df)
+        return df
     
     def __load_dataset(self):
         if Utilities.df_file_exists():

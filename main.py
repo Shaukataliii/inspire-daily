@@ -2,14 +2,18 @@ from src.utils import Utilities, DFHandler
 from plyer import notification
 import os, time, random, subprocess, zipfile, shutil
 import pandas as pd
-from datetime import date 
+from datetime import date
+import tkinter as tk
+from tkinter import messagebox
+
 
 
 
 class Initializer():
     """Sets up things. Makes sure dataset is ready and runs the notification handler."""
     def set_instance_params(self, params):
-        self.df_filepath = params["df_filepath"]
+        self.quote_df_filepath = params["quote_df_filepath"]
+        self.hadith_df_filepath = params["hadith_df_filepath"]
         self.hours_to_wait_before_recheck = params["hours_to_wait_before_recheck"]
         self.kaggle_dataset_api_cmd = params["kaggle_dataset_api_cmd"]
 
@@ -17,8 +21,8 @@ class Initializer():
         params = Utilities.load_params()
         self.set_instance_params(params)
         self.make_sure_dataset_is_ready()
-        notification_handler, quote_provider = self.initialize_classes()
-        notification_handler.display_quote_on_time(quote_provider)
+        notification_handler, quote_provider, hadith_provider = self.initialize_classes()
+        notification_handler.display_quote_on_time(quote_provider, hadith_provider)
 
     def make_sure_dataset_is_ready(self):
         if Utilities.df_file_exists():
@@ -32,8 +36,11 @@ class Initializer():
         notification_handler.setter(self.hours_to_wait_before_recheck)
         
         quote_provider = QuoteProvider()
-        quote_provider.setter(self.df_filepath)
-        return (notification_handler, quote_provider)
+        quote_provider.setter(self.quote_df_filepath)
+
+        hadith_provider = HadithProvider()
+        hadith_provider.setter(self.hadith_df_filepath)
+        return (notification_handler, quote_provider, hadith_provider)
 
 
 class DatasetPreparer:
@@ -105,12 +112,16 @@ class NotificationHandler:
     def setter(self, hours_to_wait_before_recheck: int = 30):
         self.hours_to_wait_before_recheck = hours_to_wait_before_recheck
     
-    def display_quote_on_time(self, quote_provider):
+    def display_quote_on_time(self, quote_provider, hadith_provider):
         print("Running..")
         while True:
             if TimeChecker.is_time_to_notify():
                 quote = quote_provider.get_quote()
+                hadith = hadith_provider.get_hadith()
                 NotificationDisplayer.show_notification(quote)
+                NotificationDisplayer.show_hadith(hadith)
+                
+                TimeChecker.update_last_notified_date_as_today_in_params()
             self.wait_before_recheck()
 
     def wait_before_recheck(self):
@@ -150,6 +161,7 @@ class TimeChecker():
         date_today = TimeChecker.__get_current_date_str()
         params['last_notified_date'] = date_today
         Utilities.update_params(params)
+        print("Last notified time updated.")
 
     def __get_current_date_str():
         return str(date.today())
@@ -171,6 +183,7 @@ class QuoteProvider:
         self.__load_df_and_set_size()
         index = self.__get_random_index()
         quote = self.__extract_quote_from_df_at_index(index)
+        quote = self.__format_quote(quote)
         return quote
     
     def __load_df_and_set_size(self):
@@ -183,22 +196,61 @@ class QuoteProvider:
     
     def __extract_quote_from_df_at_index(self, index) -> pd.Series:
         quote_details = self.df.iloc[index,:]
+        return quote_details
+    
+    def __format_quote(self, quote_details):
+        quote = QuoteFormatter.format_quote(quote_details)
+        return quote
+
+
+class HadithProvider:
+    """Provides random hadith from the hadiths dataset."""
+    def setter(self, df_filepath):
+        self.df_filepath = df_filepath
+        self.dataset_size = None
+        self.df = None
+
+    def get_hadith(self):
+        print("Getting quote..")
+        quote = self.__get_random_quote()
+        return quote
+
+    def __get_random_quote(self) -> str:
+        self.__load_df_and_set_size()
+        index = self.__get_random_index()
+        quote = self.__extract_quote_from_df_at_index(index)
+        quote = self.__format_quote(quote)
+        return quote
+    
+    def __load_df_and_set_size(self):
+        self.df = Utilities.load_pd_dataframe(self.df_filepath)
+        self.dataset_size = DFHandler().get_dataset_size(self.df)
+
+    def __get_random_index(self) -> int:
+        random_index = random.randint(0,self.dataset_size)
+        return random_index
+    
+    def __extract_quote_from_df_at_index(self, index) -> pd.Series:
+        quote_details = self.df.iloc[index,:]
+        return quote_details
+    
+    def __format_quote(self, quote_details):
         quote = QuoteFormatter.format_quote(quote_details)
         return quote
 
 
 class QuoteFormatter:
-    """Formats provided quote."""
-    def format_quote(quote_details: pd.Series) -> str:
-        quote_details = list(quote_details)
-        quote = quote_details[0]
-        author = quote_details[1]
-        quote = f'"{quote}" \n- {author}'
-        return quote
+    """Formats provided quote/hadith. Treats 0th index as content and 1st index as source."""
+    def format_quote(details: pd.Series) -> str:
+        details = list(details)
+        content = details[0]
+        detail = details[1]
+        content = f'"{content}" \n- {detail}'
+        return content
     
 
 class NotificationDisplayer:
-    """Displays notification with provided message."""
+    """Displays notification and hadith."""
     def show_notification(message: str):
         notification.notify(
             app_name="Inspire Daily",
@@ -208,10 +260,37 @@ class NotificationDisplayer:
             timeout=20  # Notification will stay for 20 seconds
         )
         print("Notification done.")
-        TimeChecker.update_last_notified_date_as_today_in_params()
+
+    def show_hadith(hadith: str):
+        """Displays the provided hadith using tkinter.
+
+        Args:
+            hadith (str): The hadith to display.
+        """
+        # Create the main window
+        root = tk.Tk()
+        root.title("InspireD Daily Hadith.")
+        
+        # Set the window size
+        root.geometry("400x200")
+        
+        # Add a label with the content
+        label = tk.Label(root, text=hadith, wraplength=350, justify="left")
+        label.pack(pady=20)
+        
+        # Add a close button
+        close_button = tk.Button(root, text="Close", command=root.destroy)
+        close_button.pack(pady=30)
+        
+        # Run the Tkinter loop
+        root.mainloop()
 
 
 
 if __name__ == "__main__":
     initializer = Initializer()
     initializer.process_initializer()
+
+
+
+# move the hadith to index 0 and source to 1
