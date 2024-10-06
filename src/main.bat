@@ -1,3 +1,3 @@
-D:
-cd Shaukat ali khan\programming\AI-Projects\inspired
+cd/
+cd myProjects\inspired
 python main.py
